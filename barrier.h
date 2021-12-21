@@ -2,6 +2,7 @@
 #define PARALLEL_BARRIER_H
 
 #include <condition_variable>
+using namespace std;
 
 class barrier {
     bool lock_oddity = false;
