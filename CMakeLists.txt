@@ -4,6 +4,6 @@ project(parallel)
 # added -fopenmp
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} --std=c++2a -fopenmp")
 
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 17)
 
-add_executable(parallel 30.09.cpp)
+add_executable(parallel 30.09.cpp barrier.cpp barrier.h)
