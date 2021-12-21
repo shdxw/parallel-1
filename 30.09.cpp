@@ -158,36 +158,6 @@ double integrate_reduction(f_t f, double a, double b)
     return Result;
 }
 
-double integrate_arr(f_t f, double a, double b) {
-    unsigned T;
-    double result = 0;
-    double dx = (b - a) / STEPS;
-    double *accum;
-
-#pragma omp parallel shared(accum, T)
-    {
-        unsigned t = (unsigned) omp_get_thread_num();
-#pragma omp single
-        {
-            T = (unsigned) get_num_threads();
-            accum = (double *) calloc(T, sizeof(double));
-            //accum1.reserve(T);
-        }
-
-        for (unsigned i = t; i < STEPS; i += T) {
-            accum[t] += f(dx * i + a);
-        }
-    }
-
-    for (unsigned i = 0; i < T; ++i) {
-        result += accum[i];
-    }
-
-    free(accum);
-
-    return result * dx;
-}
-
 double integrate_ps_align_omp(f_t f, double a, double b) {
     double global_result = 0;
     partial_sum_t_ *partial_sum;
@@ -293,6 +263,7 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
 
         reduction_partial_results[t].value = accum;
 
+#if 0
         size_t s = 1;
         while(s < T)
         {
@@ -304,6 +275,15 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
                 s *= k;
             }
         }
+#else
+        for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
+        {
+            bar.arrive_and_wait();
+            if(((t % s_next) == 0) && (t + s < T))
+                reduction_partial_results[t].value = f(reduction_partial_results[t].value,
+                                                       reduction_partial_results[t + s].value);
+        }
+#endif
     };
 
     vector<thread> threads;
@@ -385,22 +365,20 @@ double integrate_reduction(double a, double b, f_t f){
 int main() {
     experiment_result p;
 
-    printf("Integrate with single(omp)\n");
-    show_experiment_result(Integrate);
-    printf("Integrate with critical sections(omp)\n");
-    show_experiment_result(integrate_crit);
-    printf("Integrate with mutex(cpp)\n");
-    show_experiment_result(integrate_cpp_mtx);
-    printf("Integrate reduction (omp)\n");
-    show_experiment_result(integrate_reduction);
-    printf("Integrate array(omp)\n");
-    show_experiment_result(integrate_arr);
-    printf("Integrate aligned array with partial sums(omp)\n");
-    show_experiment_result(integrate_ps_align_omp);
-    printf("Integrate with partial sums(cpp)\n");
-    show_experiment_result(integrate_ps_cpp);
-    printf("Integrate with atomic operations(cpp)\n");
-    show_experiment_result(integrate_cpp_atomic);
+//    printf("Integrate with single(omp)\n");
+//    show_experiment_result(Integrate);
+//    printf("Integrate with critical sections(omp)\n");
+//    show_experiment_result(integrate_crit);
+//    printf("Integrate with mutex(cpp)\n");
+//    show_experiment_result(integrate_cpp_mtx);
+//    printf("Integrate reduction (omp)\n");
+//    show_experiment_result(integrate_reduction);
+//    printf("Integrate aligned array with partial sums(omp)\n");
+//    show_experiment_result(integrate_ps_align_omp);
+//    printf("Integrate with partial sums(cpp)\n");
+//    show_experiment_result(integrate_ps_cpp);
+//    printf("Integrate with atomic operations(cpp)\n");
+//    show_experiment_result(integrate_cpp_atomic);
 
 //    printf("{\n\"series\": [\n");
 //    show_experiment_result_json(Integrate, "Integrate");
@@ -416,14 +394,17 @@ int main() {
 //    show_experiment_result_json(integrate_cpp_atomic, "integrate_cpp_atomic");
 //    printf("]}");
 
-    unsigned V[9];
-    printf("%9s\t%9s\n", "V-size", "Average");
+    unsigned V[16];
+    double a = -1, b = 1;
+    double dx = (b-a)/ STEPS;
     for (unsigned i = 1; i <= size(V); i++) {
         V[i] = i + 1;
-//        cout << i << "           " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
-//        cout << "Average: " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
+//        cout << i << " " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
+        cout << "Average: " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
 //         cout << "Average: " << reduce_range(1, 16, 10000, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
     }
-
+    for (unsigned i = 1; i <= size(V); i++) {
+        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
+    }
     return 0;
 }
