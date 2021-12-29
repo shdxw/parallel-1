@@ -44,6 +44,7 @@ double f(double x) {
 unsigned g_num_threads = thread::hardware_concurrency();
 
 void set_num_threads(unsigned T) {
+    omp_set_num_threads(T);
     g_num_threads = T;
 }
 
@@ -63,7 +64,7 @@ void show_experiment_result(I_t I) {
     printf("%10s\t%10s\t%10sms\t%13s\n", "Threads", "Result", "Time", "Acceleration");
     for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
         experiment_result R;
-        omp_set_num_threads(T);
+        set_num_threads(T);
         R = run_experiment(I);
         if (T == 1) {
             T1 = R.time_ms;
@@ -77,7 +78,7 @@ void show_experiment_result_json(I_t I, string name) {
     printf("\"points\": [\n");
     for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
         experiment_result R;
-        omp_set_num_threads(T);
+        set_num_threads(T);
         R = run_experiment(I);
         printf("{ \"x\": %8u, \"y\": %8g}", T, R.time_ms);
         if (T < omp_get_num_procs()) printf(",\n");
@@ -158,6 +159,32 @@ double integrate_reduction(f_t f, double a, double b)
     return Result;
 }
 
+double integrate_arr(f_t f, double a, double b) {
+    unsigned T;
+    double global_result = 0;
+    double dx = (b - a) / STEPS;
+    double *acc;
+
+#pragma omp parallel shared(acc, T)
+    {
+        unsigned t = (unsigned) omp_get_thread_num();
+#pragma omp single
+        {
+            T = (unsigned) get_num_threads();
+            acc = (double *) calloc(T, sizeof(double));
+        }
+        for (unsigned i = t; i < STEPS; i += T) {
+            acc[t] += f(dx * i + a);
+        }
+    }
+    for (unsigned i = 0; i < T; ++i) {
+        global_result += acc[i];
+    }
+    free(acc);
+
+    return global_result * dx;
+}
+
 double integrate_ps_align_omp(f_t f, double a, double b) {
     double global_result = 0;
     partial_sum_t_ *partial_sum;
@@ -186,7 +213,7 @@ double integrate_ps_cpp(f_t f, double a, double b) {
     using namespace std;
     double dx = (b - a) / STEPS;
     double result = 0;
-    unsigned T = thread::hardware_concurrency();
+    unsigned T = get_num_threads();
     auto vec = vector(T, partial_sum_t_{0.0});
     vector<thread> thread_vec;
     auto thread_proc = [=, &vec](auto t) {
@@ -365,20 +392,20 @@ double integrate_reduction(double a, double b, f_t f){
 int main() {
     experiment_result p;
 
-//    printf("Integrate with single(omp)\n");
-//    show_experiment_result(Integrate);
-//    printf("Integrate with critical sections(omp)\n");
-//    show_experiment_result(integrate_crit);
-//    printf("Integrate with mutex(cpp)\n");
-//    show_experiment_result(integrate_cpp_mtx);
-//    printf("Integrate reduction (omp)\n");
-//    show_experiment_result(integrate_reduction);
-//    printf("Integrate aligned array with partial sums(omp)\n");
-//    show_experiment_result(integrate_ps_align_omp);
-//    printf("Integrate with partial sums(cpp)\n");
-//    show_experiment_result(integrate_ps_cpp);
-//    printf("Integrate with atomic operations(cpp)\n");
-//    show_experiment_result(integrate_cpp_atomic);
+    printf("Integrate with single(omp)\n");
+    show_experiment_result(Integrate);
+    printf("Integrate with critical sections(omp)\n");
+    show_experiment_result(integrate_crit);
+    printf("Integrate with mutex(cpp)\n");
+    show_experiment_result(integrate_cpp_mtx);
+    printf("Integrate reduction (omp)\n");
+    show_experiment_result(integrate_reduction);
+    printf("Integrate aligned array with partial sums(omp)\n");
+    show_experiment_result(integrate_ps_align_omp);
+    printf("Integrate with partial sums(cpp)\n");
+    show_experiment_result(integrate_ps_cpp);
+    printf("Integrate with atomic operations(cpp)\n");
+    show_experiment_result(integrate_cpp_atomic);
 
 //    printf("{\n\"series\": [\n");
 //    show_experiment_result_json(Integrate, "Integrate");
@@ -394,17 +421,15 @@ int main() {
 //    show_experiment_result_json(integrate_cpp_atomic, "integrate_cpp_atomic");
 //    printf("]}");
 
-    unsigned V[16];
-    double a = -1, b = 1;
-    double dx = (b-a)/ STEPS;
-    for (unsigned i = 1; i <= size(V); i++) {
-        V[i] = i + 1;
-//        cout << i << " " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
-        cout << "Average: " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
-//         cout << "Average: " << reduce_range(1, 16, 10000, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
-    }
-    for (unsigned i = 1; i <= size(V); i++) {
-        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
-    }
+//    unsigned V[16];
+//    double a = -1, b = 1;
+//    double dx = (b-a)/ STEPS;
+//    for (unsigned i = 1; i <= size(V); i++) {
+//        V[i] = i + 1;
+//        cout << "Average: " << reduce_vector(V, size(V), [](auto x, auto y) {  return x + y; }, 0u) / size(V) << '\n';
+//    }
+//    for (unsigned i = 1; i <= size(V); i++) {
+//        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
+//    }
     return 0;
 }
