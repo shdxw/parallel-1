@@ -290,19 +290,6 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
 
         reduction_partial_results[t].value = accum;
 
-// #if 0
-//         size_t s = 1;
-//         while(s < T)
-//         {
-//             bar.arrive_and_wait();
-//             if((t % (s * k)) && (t + s < T))
-//             {
-//                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
-//                                                        reduction_partial_results[t + s].value);
-//                 s *= k;
-//             }
-//         }
-// #else
         for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
         {
             bar.arrive_and_wait();
@@ -310,7 +297,6 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
                                                        reduction_partial_results[t + s].value);
         }
-// #endif
     };
 
     vector<thread> threads;
