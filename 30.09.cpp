@@ -73,7 +73,7 @@ void show_experiment_result(I_t I) {
         if (T == 1) {
             T1 = R.time_ms;
         }
-        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1 / R.time_ms);
+        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1/R.time_ms);
     };
 }
 
@@ -255,26 +255,32 @@ double integrate_cpp_atomic(f_t f, double a, double b) {
     return Result * dx;
 }
 
-template<class ElementType, class BinaryFn>
-ElementType reduce_vector(const ElementType *V, size_t n, BinaryFn f, ElementType zero) {
+template <class ElementType, class BinaryFn>
+ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementType zero)
+{
     unsigned T = get_num_threads();
-    struct reduction_partial_result_t {
+    struct reduction_partial_result_t
+    {
         alignas(hardware_destructive_interference_size) ElementType value;
     };
     static auto reduction_partial_results =
             vector<reduction_partial_result_t>(thread::hardware_concurrency(),
-                                               reduction_partial_result_t{zero});
+                                                            reduction_partial_result_t{zero});
     constexpr size_t k = 2;
-    barrier bar{T};
+    barrier bar {T};
 
-    auto thread_proc = [=, &bar](unsigned t) {
+    auto thread_proc = [=, &bar](unsigned t)
+    {
         auto K = ceil_div(n, k);
         size_t Mt = K / T;
         size_t it1 = K % T;
 
-        if (t < it1) {
+        if(t < it1)
+        {
             it1 = ++Mt * t;
-        } else {
+        }
+        else
+        {
             it1 = Mt * t + it1;
         }
         it1 *= k;
@@ -282,53 +288,42 @@ ElementType reduce_vector(const ElementType *V, size_t n, BinaryFn f, ElementTyp
         size_t it2 = it1 + mt;
 
         ElementType accum = zero;
-        for (size_t i = it1; i < it2; i++)
+        for(size_t i = it1; i < it2; i++)
             accum = f(accum, V[i]);
 
         reduction_partial_results[t].value = accum;
 
-#if 0
-        size_t s = 1;
-        while(s < T)
+        for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
         {
             bar.arrive_and_wait();
-            if((t % (s * k)) && (t + s < T))
-            {
-                reduction_partial_results[t].value = f(reduction_partial_results[t].value,
-                                                       reduction_partial_results[t + s].value);
-                s *= k;
-            }
-        }
-#else
-        for (std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next) {
-            bar.arrive_and_wait();
-            if (((t % s_next) == 0) && (t + s < T))
+            if(((t % s_next) == 0) && (t + s < T))
                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
                                                        reduction_partial_results[t + s].value);
         }
-#endif
     };
 
     vector<thread> threads;
-    for (unsigned t = 1; t < T; t++)
+    for(unsigned t = 1; t < T; t++)
         threads.emplace_back(thread_proc, t);
     thread_proc(0);
-    for (auto &thread: threads)
+    for(auto& thread : threads)
         thread.join();
 
     return reduction_partial_results[0].value;
 }
 
-template<class ElementType, class UnaryFn, class BinaryFn>
-#if 0
-requires {
-    is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
-    is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
-}
-#endif
-ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero) {
+template <class ElementType, class UnaryFn, class BinaryFn>
+// #if 0
+// requires {
+//     is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
+//     is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
+// }
+// #endif
+ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero)
+{
     unsigned T = get_num_threads();
-    struct reduction_partial_result_t {
+    struct reduction_partial_result_t
+    {
         alignas(hardware_destructive_interference_size) ElementType value;
     };
     static auto reduction_partial_results =
@@ -336,15 +331,19 @@ ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, Bi
 
     barrier bar{T};
     constexpr size_t k = 2;
-    auto thread_proc = [=, &bar](unsigned t) {
+    auto thread_proc = [=, &bar](unsigned t)
+    {
         auto K = ceil_div(n, k);
         double dx = (b - a) / n;
         size_t Mt = K / T;
         size_t it1 = K % T;
 
-        if (t < it1) {
+        if(t < it1)
+        {
             it1 = ++Mt * t;
-        } else {
+        }
+        else
+        {
             it1 = Mt * t + it1;
         }
         it1 *= k;
@@ -352,14 +351,15 @@ ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, Bi
         size_t it2 = it1 + mt;
 
         ElementType accum = zero;
-        for (size_t i = it1; i < it2; i++)
-            accum = reduce_2(accum, get(a + i * dx));
+        for(size_t i = it1; i < it2; i++)
+            accum = reduce_2(accum, get(a + i*dx));
 
         reduction_partial_results[t].value = accum;
 
-        for (size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next) {
+        for(size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
+        {
             bar.arrive_and_wait();
-            if (((t % s_next) == 0) && (t + s < T))
+            if(((t % s_next) == 0) && (t + s < T))
                 reduction_partial_results[t].value = reduce_2(reduction_partial_results[t].value,
                                                               reduction_partial_results[t + s].value);
         }
