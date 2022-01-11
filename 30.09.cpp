@@ -290,19 +290,19 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
 
         reduction_partial_results[t].value = accum;
 
-#if 0
-        size_t s = 1;
-        while(s < T)
-        {
-            bar.arrive_and_wait();
-            if((t % (s * k)) && (t + s < T))
-            {
-                reduction_partial_results[t].value = f(reduction_partial_results[t].value,
-                                                       reduction_partial_results[t + s].value);
-                s *= k;
-            }
-        }
-#else
+// #if 0
+//         size_t s = 1;
+//         while(s < T)
+//         {
+//             bar.arrive_and_wait();
+//             if((t % (s * k)) && (t + s < T))
+//             {
+//                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
+//                                                        reduction_partial_results[t + s].value);
+//                 s *= k;
+//             }
+//         }
+// #else
         for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
         {
             bar.arrive_and_wait();
@@ -310,7 +310,7 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
                                                        reduction_partial_results[t + s].value);
         }
-#endif
+// #endif
     };
 
     vector<thread> threads;
@@ -324,12 +324,12 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
 }
 
 template <class ElementType, class UnaryFn, class BinaryFn>
-#if 0
-requires {
-    is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
-    is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
-}
-#endif
+// #if 0
+// requires {
+//     is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
+//     is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
+// }
+// #endif
 ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero)
 {
     unsigned T = get_num_threads();
