@@ -12,11 +12,15 @@
 #include "barrier.h"
 #include <algorithm>
 #include "iostream"
+#include "fib.h"
+#include "randomize.h"
 
 using namespace std;
 
 typedef double (*f_t)(double);
+
 typedef double (*I_t)(f_t, double, double);
+
 typedef struct experiment_result {
     double result;
     double time_ms;
@@ -69,7 +73,7 @@ void show_experiment_result(I_t I) {
         if (T == 1) {
             T1 = R.time_ms;
         }
-        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1/R.time_ms);
+        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1 / R.time_ms);
     };
 }
 
@@ -146,14 +150,13 @@ double integrate_crit(f_t f, double a, double b) { //IntegrateParallelOMP
     return Result * dx;
 }
 
-double integrate_reduction(f_t f, double a, double b)
-{
+double integrate_reduction(f_t f, double a, double b) {
     double Result = 0;
-    double dx = (b-a)/STEPS;
+    double dx = (b - a) / STEPS;
 
 #pragma omp parallel for reduction(+:Result)
-    for(int i = 0; i < STEPS; i++)
-        Result += f(dx*i + a);
+    for (int i = 0; i < STEPS; i++)
+        Result += f(dx * i + a);
 
     Result *= dx;
     return Result;
@@ -197,7 +200,7 @@ double integrate_ps_align_omp(f_t f, double a, double b) {
         {
             T = (unsigned) omp_get_num_threads();
             partial_sum = (partial_sum_t_ *) aligned_alloc(CACHE_LINE, T * sizeof(partial_sum_t_));
-            memset(partial_sum, 0, T*sizeof(*partial_sum));
+            memset(partial_sum, 0, T * sizeof(*partial_sum));
         };
         for (unsigned i = t; i < STEPS; i += T)
             partial_sum[t].value += f(dx * i + a);
@@ -252,32 +255,26 @@ double integrate_cpp_atomic(f_t f, double a, double b) {
     return Result * dx;
 }
 
-template <class ElementType, class BinaryFn>
-ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementType zero)
-{
+template<class ElementType, class BinaryFn>
+ElementType reduce_vector(const ElementType *V, size_t n, BinaryFn f, ElementType zero) {
     unsigned T = get_num_threads();
-    struct reduction_partial_result_t
-    {
+    struct reduction_partial_result_t {
         alignas(hardware_destructive_interference_size) ElementType value;
     };
     static auto reduction_partial_results =
             vector<reduction_partial_result_t>(thread::hardware_concurrency(),
-                                                            reduction_partial_result_t{zero});
+                                               reduction_partial_result_t{zero});
     constexpr size_t k = 2;
-    barrier bar {T};
+    barrier bar{T};
 
-    auto thread_proc = [=, &bar](unsigned t)
-    {
+    auto thread_proc = [=, &bar](unsigned t) {
         auto K = ceil_div(n, k);
         size_t Mt = K / T;
         size_t it1 = K % T;
 
-        if(t < it1)
-        {
+        if (t < it1) {
             it1 = ++Mt * t;
-        }
-        else
-        {
+        } else {
             it1 = Mt * t + it1;
         }
         it1 *= k;
@@ -285,7 +282,7 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
         size_t it2 = it1 + mt;
 
         ElementType accum = zero;
-        for(size_t i = it1; i < it2; i++)
+        for (size_t i = it1; i < it2; i++)
             accum = f(accum, V[i]);
 
         reduction_partial_results[t].value = accum;
@@ -303,10 +300,9 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
             }
         }
 #else
-        for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
-        {
+        for (std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next) {
             bar.arrive_and_wait();
-            if(((t % s_next) == 0) && (t + s < T))
+            if (((t % s_next) == 0) && (t + s < T))
                 reduction_partial_results[t].value = f(reduction_partial_results[t].value,
                                                        reduction_partial_results[t + s].value);
         }
@@ -314,27 +310,25 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
     };
 
     vector<thread> threads;
-    for(unsigned t = 1; t < T; t++)
+    for (unsigned t = 1; t < T; t++)
         threads.emplace_back(thread_proc, t);
     thread_proc(0);
-    for(auto& thread : threads)
+    for (auto &thread: threads)
         thread.join();
 
     return reduction_partial_results[0].value;
 }
 
-template <class ElementType, class UnaryFn, class BinaryFn>
+template<class ElementType, class UnaryFn, class BinaryFn>
 #if 0
 requires {
     is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
     is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
 }
 #endif
-ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero)
-{
+ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero) {
     unsigned T = get_num_threads();
-    struct reduction_partial_result_t
-    {
+    struct reduction_partial_result_t {
         alignas(hardware_destructive_interference_size) ElementType value;
     };
     static auto reduction_partial_results =
@@ -342,19 +336,15 @@ ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, Bi
 
     barrier bar{T};
     constexpr size_t k = 2;
-    auto thread_proc = [=, &bar](unsigned t)
-    {
+    auto thread_proc = [=, &bar](unsigned t) {
         auto K = ceil_div(n, k);
         double dx = (b - a) / n;
         size_t Mt = K / T;
         size_t it1 = K % T;
 
-        if(t < it1)
-        {
+        if (t < it1) {
             it1 = ++Mt * t;
-        }
-        else
-        {
+        } else {
             it1 = Mt * t + it1;
         }
         it1 *= k;
@@ -362,50 +352,49 @@ ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, Bi
         size_t it2 = it1 + mt;
 
         ElementType accum = zero;
-        for(size_t i = it1; i < it2; i++)
-            accum = reduce_2(accum, get(a + i*dx));
+        for (size_t i = it1; i < it2; i++)
+            accum = reduce_2(accum, get(a + i * dx));
 
         reduction_partial_results[t].value = accum;
 
-        for(size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
-        {
+        for (size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next) {
             bar.arrive_and_wait();
-            if(((t % s_next) == 0) && (t + s < T))
+            if (((t % s_next) == 0) && (t + s < T))
                 reduction_partial_results[t].value = reduce_2(reduction_partial_results[t].value,
                                                               reduction_partial_results[t + s].value);
         }
     };
 
     vector<thread> threads;
-    for(unsigned t = 1; t < T; t++)
+    for (unsigned t = 1; t < T; t++)
         threads.emplace_back(thread_proc, t);
     thread_proc(0);
-    for(auto& thread : threads)
+    for (auto &thread: threads)
         thread.join();
     return reduction_partial_results[0].value;
 }
 
-double integrate_reduction(double a, double b, f_t f){
-    return reduce_range(a, b, STEPS, f, [](auto x, auto y) {return x + y;}, 0.0) * ((b - a) / STEPS);
+double integrate_reduction(double a, double b, f_t f) {
+    return reduce_range(a, b, STEPS, f, [](auto x, auto y) { return x + y; }, 0.0) * ((b - a) / STEPS);
 }
 
 int main() {
     experiment_result p;
 
-    printf("Integrate with single(omp)\n");
-    show_experiment_result(Integrate);
-    printf("Integrate with critical sections(omp)\n");
-    show_experiment_result(integrate_crit);
-    printf("Integrate with mutex(cpp)\n");
-    show_experiment_result(integrate_cpp_mtx);
-    printf("Integrate reduction (omp)\n");
-    show_experiment_result(integrate_reduction);
-    printf("Integrate aligned array with partial sums(omp)\n");
-    show_experiment_result(integrate_ps_align_omp);
-    printf("Integrate with partial sums(cpp)\n");
-    show_experiment_result(integrate_ps_cpp);
-    printf("Integrate with atomic operations(cpp)\n");
-    show_experiment_result(integrate_cpp_atomic);
+//    printf("Integrate with single(omp)\n");
+//    show_experiment_result(Integrate);
+//    printf("Integrate with critical sections(omp)\n");
+//    show_experiment_result(integrate_crit);
+//    printf("Integrate with mutex(cpp)\n");
+//    show_experiment_result(integrate_cpp_mtx);
+//    printf("Integrate reduction (omp)\n");
+//    show_experiment_result(integrate_reduction);
+//    printf("Integrate aligned array with partial sums(omp)\n");
+//    show_experiment_result(integrate_ps_align_omp);
+//    printf("Integrate with partial sums(cpp)\n");
+//    show_experiment_result(integrate_ps_cpp);
+//    printf("Integrate with atomic operations(cpp)\n");
+//    show_experiment_result(integrate_cpp_atomic);
 
 //    printf("{\n\"series\": [\n");
 //    show_experiment_result_json(Integrate, "Integrate");
@@ -431,5 +420,15 @@ int main() {
 //    for (unsigned i = 1; i <= size(V); i++) {
 //        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
 //    }
+
+    unsigned param = 10;
+    unsigned fibonacci = Fibonacci(param);
+    cout << fibonacci << endl;
+    unsigned fibonacci_omp = Fibonacci_omp(param);
+    cout << fibonacci_omp << endl;
+    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
+    cout << fibonacci_sch_omp << endl;
+    unsigned asynciBbonacci = async_Fibonacci(param).get();
+    cout << asynciBbonacci << endl;
     return 0;
 }
