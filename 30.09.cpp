@@ -18,9 +18,10 @@
 using namespace std;
 
 typedef double (*f_t)(double);
+typedef double (*fib_t)(double);
 
 typedef double (*I_t)(f_t, double, double);
-typedef double (*F_t)(f_t);
+typedef double (*F_t)(fib_t);
 typedef double (*R_t)(f_t, unsigned);
 
 typedef struct experiment_result {
@@ -398,6 +399,156 @@ double integrate_reduction(double a, double b, f_t f) {
     return reduce_range(a, b, STEPS, f, [](auto x, auto y) { return x + y; }, 0.0) * ((b - a) / STEPS);
 }
 
+//---Randomize----------------------------------------------------------------------------------------------------------
+
+double randomize_arr_single(unsigned seed, unsigned* V, size_t n, unsigned min, unsigned max){
+    uint64_t a = 6364136223846793005;
+    unsigned b = 1;
+    uint64_t prev = seed;
+    uint64_t sum = 0;
+
+    for (unsigned i=0; i<n; i++){
+        uint64_t cur = a*prev + b;
+        V[i] = (cur % (max - min + 1)) + min;
+        prev = cur;
+        sum +=V[i];
+    }
+
+    return (double)sum/(double)n;
+}
+
+uint64_t* getLUTA(unsigned size, uint64_t a){
+    uint64_t* res = new uint64_t(size+1);
+    res[0] = 1;
+    for (unsigned i=1; i<=size; i++) res[i] = res[i-1] * a;
+    return res;
+}
+
+uint64_t* getLUTB(unsigned size, uint64_t* a, uint64_t b){
+    uint64_t* res = new uint64_t(size);
+    res[0] = b;
+    for (unsigned i=1; i<size; i++){
+        uint64_t acc = 0;
+        for (unsigned j=0; j<=i; j++){
+            acc += a[j];
+        }
+        res[i] = acc*b;
+    }
+    return res;
+}
+
+uint64_t getA(unsigned size, uint64_t a){
+    uint64_t res = 1;
+    for (unsigned i=1; i<=size; i++) res = res * a;
+    return res;
+}
+
+uint64_t getB(unsigned size, uint64_t a){
+    uint64_t* acc = new uint64_t(size);
+    uint64_t res = 1;
+    acc[0] = 1;
+    for (unsigned i=1; i<=size; i++){
+        for (unsigned j=0; j<=i; j++){
+            acc[i] = acc[j] * a;
+        }
+        res += acc[i];
+    }
+    free(acc);
+
+    return res;
+}
+
+double randomize_arr(unsigned seed, unsigned* V, size_t n, unsigned min, unsigned max){
+    uint64_t a = 6364136223846793005;
+    unsigned b = 1;
+    unsigned T;
+    uint64_t LUTA;
+    uint64_t LUTB;
+    uint64_t sum = 0;
+
+#pragma omp parallel shared(V, T, LUTA, LUTB)
+    {
+        unsigned t = (unsigned) omp_get_thread_num();
+#pragma omp single
+        {
+            T = (unsigned) get_num_threads();
+            LUTA = getA(T, a);
+            LUTB = getB((T - 1), a)*b;
+        }
+        uint64_t prev = seed;
+        uint64_t cur;
+
+        for (unsigned i=t; i<n; i += T){
+            if (i == t){
+                cur = getA(i+1, a)*seed + getB(i, a)*b;
+            } else {
+                cur = LUTA*seed + LUTB;
+            }
+            V[i] = (cur % (max - min + 1)) + min;
+            sum += V[i];
+            prev = cur;
+        }
+    }
+
+    return (double)sum/(double)n;
+}
+
+//---Fibonacci----------------------------------------------------------------------------------------------------------
+
+unsigned Fibonacci(unsigned n){
+    if (n <= 2)
+        return 1;
+    return Fibonacci(n-1) + Fibonacci(n-2);
+}
+
+unsigned Fibonacci_omp(unsigned n){
+    if (n <= 2)
+        return 1;
+    unsigned x1, x2;
+#pragma omp task
+    {
+        x1 = Fibonacci_omp(n-1);
+    };
+#pragma omp task
+    {
+        x2 = Fibonacci_omp(n-2);
+    };
+#pragma omp taskwait
+    return x1 + x2;
+}
+
+#include <future>
+std::future<unsigned> async_Fibonacci(fib_t f, unsigned n)
+{
+    if (n <= 2) {
+        auto fut = std::async([=]() { return (unsigned)1; });
+        return fut;
+    }
+    auto fut = std::async([=]() {
+        std::future<unsigned> a = async_Fibonacci(f, n - 1);
+        std::future<unsigned> b = async_Fibonacci(f, n - 2);
+        unsigned c = a.get() + b.get();
+        return c;
+    });
+    return fut;
+}
+
+unsigned Fibonacci_sch_omp(unsigned n){
+    unsigned acc [n];
+#pragma omp for schedule(dynamic)
+    for (int i=0; i<n; i++){
+        if (i<=1) { acc[i] = 1; }
+        else{
+            acc[i] = acc[i-1] + acc[i-2];
+        }
+    }
+    unsigned res = 0;
+    for (int i=0; i<n; i++){
+        res += acc[i];
+    }
+    return res;
+}
+
 int main() {
     experiment_result p;
 
@@ -440,16 +591,25 @@ int main() {
 //    for (unsigned i = 1; i <= size(V); i++) {
 //        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
 //    }
-
-    unsigned param = 10;
-    unsigned fibonacci = Fibonacci(param);
-    show_experiment_result_Fib(Fibonacci);
-    cout << fibonacci << endl;
+//
+//    unsigned param = 10;
+//    unsigned fibonacci = Fibonacci(param);
+//    cout << fibonacci << endl;
 //    unsigned fibonacci_omp = Fibonacci_omp(param);
 //    cout << fibonacci_omp << endl;
 //    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
 //    cout << fibonacci_sch_omp << endl;
 //    unsigned asynciBbonacci = async_Fibonacci(param).get();
 //    cout << asynciBbonacci << endl;
+
+    size_t len = 20;
+    unsigned arr[len];
+    unsigned seed = 105;
+    unsigned min = 1;
+    unsigned max = 300;
+    cout << randomize_arr_single(seed, arr, len, min, max) << endl;
+    cout << randomize_arr(seed, arr, len, min, max) << endl;
+
+
     return 0;
 }
