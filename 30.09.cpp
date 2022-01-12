@@ -91,25 +91,30 @@ void show_experiment_result_json(I_t I, string name) {
 }
 
 double Integrate(f_t f, double a, double b) {//integrateArr
+    
     unsigned T;
-    double Result = 0;
+    double global_result = 0;
     double dx = (b - a) / STEPS;
-    double *Accum;
-#pragma omp parallel shared(Accum, T)
+    double *acc;
+
+#pragma omp parallel shared(acc, T)
     {
-        unsigned int t = (unsigned int) omp_get_thread_num();
+        unsigned t = (unsigned) omp_get_thread_num();
 #pragma omp single
         {
-            T = (unsigned) omp_get_num_threads();
-            Accum = (double *) calloc(T, sizeof(double));
+            T = (unsigned) get_num_threads();
+            acc = (double *) calloc(T, sizeof(double));
         }
-        for (unsigned i = t; i < STEPS; i += T)
-            Accum[t] += f(dx * i + a);
+        for (unsigned i = t; i < STEPS; i += T) {
+            acc[t] += f(dx * i + a);
+        }
     }
-    for (unsigned i = 0; i < T; ++i)
-        Result += Accum[i];
-    free(Accum);
-    return Result * dx;
+    for (unsigned i = 0; i < T; ++i) {
+        global_result += acc[i];
+    }
+    free(acc);
+
+    return global_result * dx;
 }
 
 double integrate_cpp_mtx(f_t f, double a, double b) {
@@ -160,32 +165,6 @@ double integrate_reduction(f_t f, double a, double b) {
 
     Result *= dx;
     return Result;
-}
-
-double integrate_arr(f_t f, double a, double b) {
-    unsigned T;
-    double global_result = 0;
-    double dx = (b - a) / STEPS;
-    double *acc;
-
-#pragma omp parallel shared(acc, T)
-    {
-        unsigned t = (unsigned) omp_get_thread_num();
-#pragma omp single
-        {
-            T = (unsigned) get_num_threads();
-            acc = (double *) calloc(T, sizeof(double));
-        }
-        for (unsigned i = t; i < STEPS; i += T) {
-            acc[t] += f(dx * i + a);
-        }
-    }
-    for (unsigned i = 0; i < T; ++i) {
-        global_result += acc[i];
-    }
-    free(acc);
-
-    return global_result * dx;
 }
 
 double integrate_ps_align_omp(f_t f, double a, double b) {
