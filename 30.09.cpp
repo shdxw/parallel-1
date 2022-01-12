@@ -20,6 +20,8 @@ using namespace std;
 typedef double (*f_t)(double);
 
 typedef double (*I_t)(f_t, double, double);
+typedef double (*F_t)(f_t);
+typedef double (*R_t)(f_t, unsigned);
 
 typedef struct experiment_result {
     double result;
@@ -63,6 +65,20 @@ experiment_result run_experiment(I_t I) {
     return {R, t1 - t0};
 }
 
+experiment_result run_experiment(F_t F) {
+    double t0 = omp_get_wtime();
+    double R = F(f);
+    double t1 = omp_get_wtime();
+    return {R, t1 - t0};
+}
+
+experiment_result run_experiment(R_t R) {
+    double t0 = omp_get_wtime();
+    double Res = R(f, 100);
+    double t1 = omp_get_wtime();
+    return {Res, t1 - t0};
+}
+
 void show_experiment_result(I_t I) {
     double T1;
     printf("%10s\t%10s\t%10sms\t%13s\n", "Threads", "Result", "Time", "Acceleration");
@@ -70,6 +86,33 @@ void show_experiment_result(I_t I) {
         experiment_result R;
         set_num_threads(T);
         R = run_experiment(I);
+        if (T == 1) {
+            T1 = R.time_ms;
+        }
+        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1/R.time_ms);
+    };
+}
+
+void show_experiment_result_Rand(R_t Rand) {
+    double T1;
+    printf("%10s\t%13s\t%13s\t%13s\t%13s\n", "Threads", "Result", "Avg", "Difference", "Acceleration");
+    for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
+        experiment_result R;
+        set_num_threads(T);
+        R = run_experiment(Rand);
+        if (T == 1) {
+            T1 = R.time_ms;
+        }
+        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1/R.time_ms);
+    };
+}
+void show_experiment_result_Fib(F_t F) {
+    double T1;
+    printf("%10s\t%10s\t%10sms\t%13s\n", "Threads", "Result", "Time", "Acceleration");
+    for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
+        experiment_result R;
+        set_num_threads(T);
+        R = run_experiment(F);
         if (T == 1) {
             T1 = R.time_ms;
         }
@@ -292,12 +335,10 @@ ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementTyp
 }
 
 template <class ElementType, class UnaryFn, class BinaryFn>
-// #if 0
 // requires {
 //     is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
 //     is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
 // }
-// #endif
 ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero)
 {
     unsigned T = get_num_threads();
@@ -402,12 +443,13 @@ int main() {
 
     unsigned param = 10;
     unsigned fibonacci = Fibonacci(param);
+    show_experiment_result_Fib(Fibonacci);
     cout << fibonacci << endl;
-    unsigned fibonacci_omp = Fibonacci_omp(param);
-    cout << fibonacci_omp << endl;
-    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
-    cout << fibonacci_sch_omp << endl;
-    unsigned asynciBbonacci = async_Fibonacci(param).get();
-    cout << asynciBbonacci << endl;
+//    unsigned fibonacci_omp = Fibonacci_omp(param);
+//    cout << fibonacci_omp << endl;
+//    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
+//    cout << fibonacci_sch_omp << endl;
+//    unsigned asynciBbonacci = async_Fibonacci(param).get();
+//    cout << asynciBbonacci << endl;
     return 0;
 }
