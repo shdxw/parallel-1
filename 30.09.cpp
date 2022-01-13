@@ -102,7 +102,7 @@ void show_experiment_result_Rand(R_t Rand) {
     double dif = 0;
     double avg = (MAX + MIN)/2;
 
-    printf("%10s\t%13s\t%13s\t%13s\t%13s\n", "Threads", "Result", "Avg", "Difference", "Acceleration");
+    printf("%10s\t%10s\t%10s\t%10s\t%10s\n", "Threads", "Result", "Avg", "Difference", "Acceleration");
     for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
         set_num_threads(T);
         experiment_result R = run_experiment_random(Rand);
