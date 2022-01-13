@@ -1,4 +1,7 @@
 #define STEPS 100000000
+#define MIN 1
+#define MAX 300
+#define SEED 100
 #define CACHE_LINE 64u
 
 #include <thread>
@@ -22,7 +25,7 @@ typedef double (*fib_t)(double);
 
 typedef double (*I_t)(f_t, double, double);
 typedef unsigned (*F_t)(unsigned);
-typedef double (*R_t)(unsigned, unsigned*, size_t, unsigned, unsigned);
+typedef double (*R_t)(unsigned*, size_t);
 
 typedef struct experiment_result {
     double result;
@@ -72,7 +75,7 @@ experiment_result run_experiment_random(R_t R) {
     unsigned seed = 100;
 
     double t0 = omp_get_wtime();
-    double Res = R(seed, (unsigned *)&arr, len, 1, 300);
+    double Res = R((unsigned *)&arr, len);
     double t1 = omp_get_wtime();
     return {Res, t1 - t0};
 }
@@ -93,6 +96,12 @@ void show_experiment_result(I_t I) {
 
 void show_experiment_result_Rand(R_t Rand) {
     double T1;
+    uint64_t a = 6364136223846793005;
+    unsigned b = 1;
+
+    double dif = 0;
+    double avg = (MAX + MIN)/2;
+
     printf("%10s\t%13s\t%13s\t%13s\t%13s\n", "Threads", "Result", "Avg", "Difference", "Acceleration");
     for (unsigned T = 1; T <= omp_get_num_procs(); ++T) {
         set_num_threads(T);
@@ -100,7 +109,8 @@ void show_experiment_result_Rand(R_t Rand) {
         if (T == 1) {
             T1 = R.time_ms;
         }
-        printf("%10u\t%10g\t%10g\t%10g\n", T, R.result, R.time_ms, T1/R.time_ms);
+        dif = avg - R.result;
+        printf("%10u\t%10g\t%10g\t%10g\t%10g\n", T, R.result, avg, dif, T1/R.time_ms);
     };
 }
 
@@ -384,15 +394,15 @@ double integrate_reduction(double a, double b, f_t f) {
 
 //---Randomize----------------------------------------------------------------------------------------------------------
 
-double randomize_arr_single(unsigned seed, unsigned* V, size_t n, unsigned min, unsigned max){
+double randomize_arr_single(unsigned* V, size_t n){
     uint64_t a = 6364136223846793005;
     unsigned b = 1;
-    uint64_t prev = seed;
+    uint64_t prev = SEED;
     uint64_t sum = 0;
 
     for (unsigned i=0; i<n; i++){
         uint64_t cur = a*prev + b;
-        V[i] = (cur % (max - min + 1)) + min;
+        V[i] = (cur % (MAX - MIN + 1)) + MIN;
         prev = cur;
         sum +=V[i];
     }
@@ -440,7 +450,7 @@ uint64_t getB(unsigned size, uint64_t a){
     return res;
 }
 
-double randomize_arr(unsigned seed, unsigned* V, size_t n, unsigned min, unsigned max){
+double randomize_arr(unsigned* V, size_t n){
     uint64_t a = 6364136223846793005;
     unsigned b = 1;
     unsigned T;
@@ -461,7 +471,7 @@ double randomize_arr(unsigned seed, unsigned* V, size_t n, unsigned min, unsigne
             LUTA = getA(T, a);
             LUTB = getB((T - 1), a)*b;
         }
-        uint64_t prev = seed;
+        uint64_t prev = SEED;
         uint64_t cur;
 
         for (unsigned i=t; i<n; i += T){
@@ -471,7 +481,7 @@ double randomize_arr(unsigned seed, unsigned* V, size_t n, unsigned min, unsigne
                 cur = LUTA*prev + LUTB;
             }
 //            cur = LUTA[i+1]*prev + LUTB[i];
-            V[i] = (cur % (max - min + 1)) + min;
+            V[i] = (cur % (MAX - MIN + 1)) + MIN;
             prev = cur;
         }
     }
@@ -619,13 +629,14 @@ int main() {
     printf("Fib\n");
     show_experiment_result_Fib(Fibonacci);
 
+
+    printf("Rand omp\n");
+    show_experiment_result_Rand(randomize_arr);
+
     size_t len = 20;
     unsigned arr[len];
-    unsigned seed = 105;
-    unsigned min = 1;
-    unsigned max = 300;
-    cout << randomize_arr_single(seed, arr, len, min, max) << endl;
-    cout << randomize_arr(seed, arr, len, min, max) << endl;
+//    cout << randomize_arr_single(arr, len) << endl;
+//    cout << randomize_arr(arr, len) << endl;
 
 //    printf("randomize_arr false sharing\n");
 //    show_experiment_result_Rand(randomize_arr);
