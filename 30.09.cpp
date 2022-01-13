@@ -35,6 +35,9 @@ typedef struct experiment_result {
 typedef struct partial_sum_t_ {
     alignas(64) double value;
 } partial_sum_t_;
+typedef struct partial_sum_t_for_rand {
+    alignas(64) unsigned value;
+} partial_sum_t_for_rand_;
 
 #if defined(__GNUC__) && __GNUC__ <= 10
 namespace std {
@@ -450,7 +453,49 @@ uint64_t getB(unsigned size, uint64_t a){
     return res;
 }
 
-double randomize_arr(unsigned* V, size_t n){
+double randomize_arr_fs(unsigned* V, size_t n){
+    uint64_t a = 6364136223846793005;
+    unsigned b = 1;
+    unsigned T;
+//    uint64_t* LUTA;
+//    uint64_t* LUTB;
+    uint64_t LUTA;
+    uint64_t LUTB;
+    uint64_t sum = 0;
+
+#pragma omp parallel shared(V, T, LUTA, LUTB)
+    {
+        unsigned t = (unsigned) omp_get_thread_num();
+#pragma omp single
+        {
+            T = (unsigned) get_num_threads();
+//            LUTA = getLUTA(n, a);
+//            LUTB = getLUTB(n, LUTA, b);
+            LUTA = getA(T, a);
+            LUTB = getB((T - 1), a)*b;
+        }
+        uint64_t prev = SEED;
+        uint64_t cur;
+
+        for (unsigned i=t; i<n; i += T){
+            if (i == t){
+                cur = getA(i+1, a)*prev + getB(i, a) * b;
+            } else {
+                cur = LUTA*prev + LUTB;
+            }
+//            cur = LUTA[i+1]*prev + LUTB[i];
+            V[i] = (cur % (MAX - MIN + 1)) + MIN;
+            prev = cur;
+        }
+    }
+
+    for (unsigned i=0; i<n;i++)
+        sum += V[i];
+
+    return (double)sum/(double)n;
+}
+
+double randomize_arr_al(unsigned * V, size_t n){
     uint64_t a = 6364136223846793005;
     unsigned b = 1;
     unsigned T;
@@ -630,16 +675,17 @@ int main() {
     show_experiment_result_Fib(Fibonacci);
 
 
-    printf("Rand omp\n");
-    show_experiment_result_Rand(randomize_arr);
+    printf("Rand omp fs\n");
+    show_experiment_result_Rand(randomize_arr_fs);
+    printf("Rand single\n");
+    show_experiment_result_Rand(randomize_arr_single);
 
-    size_t len = 20;
-    unsigned arr[len];
+//    size_t len = 20;
+//    unsigned arr[len];
+//    unsigned* arrAl = (unsigned*) aligned_alloc(CACHE_LINE, len);
 //    cout << randomize_arr_single(arr, len) << endl;
-//    cout << randomize_arr(arr, len) << endl;
-
-//    printf("randomize_arr false sharing\n");
-//    show_experiment_result_Rand(randomize_arr);
-
+//    cout << randomize_arr_fs(arr, len) << endl;
+//    cout << randomize_arr_al(arrAl, len) << endl;
+//    free(arrAl);
     return 0;
 }
