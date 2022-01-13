@@ -73,7 +73,7 @@ experiment_result run_experiment(I_t I) {
 }
 
 experiment_result run_experiment_random(R_t R) {
-    size_t len = 100000;
+    size_t len = 2000000;
     unsigned arr[len];
     unsigned seed = 100;
 
@@ -442,17 +442,17 @@ uint64_t getA(unsigned size, uint64_t a){
 }
 
 uint64_t getB(unsigned size, uint64_t a){
-    uint64_t* acc = (uint64_t *) calloc(size+1, sizeof(uint64_t));
+//    uint64_t* acc = (uint64_t *) calloc(size+1, sizeof(uint64_t));
 //    uint64_t* acc = new uint64_t(size);
     uint64_t res = 1;
-    acc[0] = 1;
+//    acc[0] = 1;
     for (unsigned i=1; i<=size; i++){
-        for (unsigned j=0; j<i; j++){
-            acc[i] = acc[j] * a;
-        }
-        res += acc[i];
+//        for (unsigned j=0; j<i; j++){
+//            acc[i] = acc[j] * a;
+//        }
+        res += getA(size, a);
     }
-    free(acc);
+//    free(acc);
     return res;
 }
 
@@ -665,11 +665,11 @@ int main() {
     printf("Rand omp fs\n");
     show_experiment_result_Rand(randomize_arr_fs);
 
-    size_t len = 2000000;
-    unsigned arr[len];
-
-    cout << randomize_arr_single(arr, len) << endl;
-    cout << randomize_arr_fs(arr, len) << endl;
+//    size_t len = 20000000;
+//    unsigned arr[len];
+//
+//    cout << randomize_arr_single(arr, len) << endl;
+//    cout << randomize_arr_fs(arr, len) << endl;
 
     return 0;
 }
