@@ -421,7 +421,8 @@ uint64_t* getLUTA(unsigned size, uint64_t a){
 }
 
 uint64_t* getLUTB(unsigned size, uint64_t* a, uint64_t b){
-    uint64_t res[size];
+//    uint64_t res[size];
+    uint64_t* res = (uint64_t *) calloc(size, sizeof(uint64_t));
     res[0] = b;
     for (unsigned i=1; i<size; i++){
         uint64_t acc = 0;
@@ -430,6 +431,7 @@ uint64_t* getLUTB(unsigned size, uint64_t* a, uint64_t b){
         }
         res[i] = acc*b;
     }
+//    free(res);
     return res;
 }
 
@@ -454,12 +456,11 @@ uint64_t getB(unsigned size, uint64_t a){
     return res;
 }
 
+
 double randomize_arr_fs(unsigned* V, size_t n){
     uint64_t a = 6364136223846793005;
     unsigned b = 1;
     unsigned T;
-//    uint64_t* LUTA;
-//    uint64_t* LUTB;
     uint64_t LUTA;
     uint64_t LUTB;
     uint64_t sum = 0;
@@ -470,8 +471,6 @@ double randomize_arr_fs(unsigned* V, size_t n){
 #pragma omp single
         {
             T = (unsigned) get_num_threads();
-//            LUTA = getLUTA(n, a);
-//            LUTB = getLUTB(n, LUTA, b);
             LUTA = getA(T, a);
             LUTB = getB((T - 1), a)*b;
         }
@@ -484,7 +483,6 @@ double randomize_arr_fs(unsigned* V, size_t n){
             } else {
                 cur = LUTA*prev + LUTB;
             }
-//            cur = LUTA[i+1]*prev + LUTB[i];
             V[i] = (cur % (MAX - MIN + 1)) + MIN;
             prev = cur;
         }
@@ -495,6 +493,34 @@ double randomize_arr_fs(unsigned* V, size_t n){
 
     return (double)sum/(double)n;
 }
+
+
+//double randomize_arr_fs(unsigned* V, size_t n){
+//    uint64_t a = 6364136223846793005;
+//    unsigned b = 1;
+//    unsigned T = (unsigned) get_num_threads();
+//    uint64_t* LUTA = getLUTA(n, a);
+//    uint64_t* LUTB = getLUTB(n, LUTA, b);
+//    uint64_t sum = 0;
+//
+//#pragma omp parallel shared(V, T, LUTA, LUTB)
+//    {
+//        unsigned t = (unsigned) omp_get_thread_num();
+//        uint64_t prev = SEED;
+//        uint64_t cur;
+//
+//        for (unsigned i=t; i<n; i += T){
+//            cur = LUTA[i+1]*prev + LUTB[i];
+//            V[i] = (cur % (MAX - MIN + 1)) + MIN;
+//            prev = cur;
+//        }
+//    }
+//
+//    for (unsigned i=0; i<n;i++)
+//        sum += V[i];
+//
+//    return (double)sum/(double)n;
+//}
 
 //---Fibonacci----------------------------------------------------------------------------------------------------------
 
