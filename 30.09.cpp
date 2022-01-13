@@ -440,7 +440,8 @@ uint64_t getA(unsigned size, uint64_t a){
 }
 
 uint64_t getB(unsigned size, uint64_t a){
-    uint64_t* acc = new uint64_t(size);
+    uint64_t* acc = (uint64_t *) calloc(size+1, sizeof(uint64_t));
+//    uint64_t* acc = new uint64_t(size);
     uint64_t res = 1;
     acc[0] = 1;
     for (unsigned i=1; i<=size; i++){
@@ -507,11 +508,11 @@ unsigned Fibonacci_omp(unsigned n){
     if (n <= 2)
         return 1;
     unsigned x1, x2;
-#pragma omp task
+#pragma omp task shared(x1)
     {
         x1 = Fibonacci_omp(n-1);
     };
-#pragma omp task
+#pragma omp task shared(x2)
     {
         x2 = Fibonacci_omp(n-2);
     };
@@ -615,30 +616,30 @@ int main() {
 //        cout << "Average: " << reduce_range(-1, 1, STEPS, f, [](auto x, auto y) {return x + y;}, 0) << '\n';
 //    }
 //
-    unsigned param = 10;
-    unsigned fibonacci = Fibonacci(param);
-    cout << fibonacci << endl;
-    unsigned fibonacci_omp = Fibonacci_omp(param);
-    cout << fibonacci_omp << endl;
-    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
-    cout << fibonacci_sch_omp << endl;
-    unsigned asynciBbonacci = async_Fibonacci(param).get();
-    cout << asynciBbonacci << endl;
+//    unsigned param = 10;
+//    unsigned fibonacci = Fibonacci(param);
+//    cout << fibonacci << endl;
+//    unsigned fibonacci_omp = Fibonacci_omp(param);
+//    cout << fibonacci_omp << endl;
+//    unsigned fibonacci_sch_omp = Fibonacci_sch_omp(param);
+//    cout << fibonacci_sch_omp << endl;
+//    unsigned asynciBbonacci = async_Fibonacci(param).get();
+//    cout << asynciBbonacci << endl;
+//
+//    printf("Fib omp\n");
+//    show_experiment_result_Fib(Fibonacci_omp);
+//    printf("Fib schedule omp\n");
+//    show_experiment_result_Fib(Fibonacci_sch_omp);
+//    printf("Fib\n");
+//    show_experiment_result_Fib(Fibonacci);
 
-    printf("Fib omp\n");
-    show_experiment_result_Fib(Fibonacci_omp);
-    printf("Fib schedule omp\n");
-    show_experiment_result_Fib(Fibonacci_sch_omp);
-    printf("Fib\n");
-    show_experiment_result_Fib(Fibonacci);
 
-
-    printf("Rand omp fs\n");
-    show_experiment_result_Rand(randomize_arr_fs);
     printf("Rand single\n");
     show_experiment_result_Rand(randomize_arr_single);
+    printf("Rand omp fs\n");
+    show_experiment_result_Rand(randomize_arr_fs);
 
-    size_t len = 20;
+    size_t len = 2000000;
     unsigned arr[len];
 
     cout << randomize_arr_single(arr, len) << endl;
