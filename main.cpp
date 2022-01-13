@@ -39,7 +39,7 @@ typedef struct partial_sum_t_for_rand {
     alignas(64) unsigned value;
 } partial_sum_t_for_rand_;
 
-#if defined(__GNUC__) && __GNUC__ <= 10
+#if defined(__GNUC__) && __GNUC__ <= 11
 namespace std {
     constexpr size_t hardware_constructive_interference_size = 64u;
     constexpr size_t hardware_destructive_interference_size = 64u;
@@ -274,126 +274,6 @@ double integrate_cpp_atomic(f_t f, double a, double b) {
     return Result * dx;
 }
 
-template <class ElementType, class BinaryFn>
-ElementType reduce_vector(const ElementType* V, size_t n, BinaryFn f, ElementType zero)
-{
-    unsigned T = get_num_threads();
-    struct reduction_partial_result_t
-    {
-        alignas(hardware_destructive_interference_size) ElementType value;
-    };
-    static auto reduction_partial_results =
-            vector<reduction_partial_result_t>(thread::hardware_concurrency(),
-                                                            reduction_partial_result_t{zero});
-    constexpr size_t k = 2;
-    barrier bar {T};
-
-    auto thread_proc = [=, &bar](unsigned t)
-    {
-        auto K = ceil_div(n, k);
-        size_t Mt = K / T;
-        size_t it1 = K % T;
-
-        if(t < it1)
-        {
-            it1 = ++Mt * t;
-        }
-        else
-        {
-            it1 = Mt * t + it1;
-        }
-        it1 *= k;
-        size_t mt = Mt * k;
-        size_t it2 = it1 + mt;
-
-        ElementType accum = zero;
-        for(size_t i = it1; i < it2; i++)
-            accum = f(accum, V[i]);
-
-        reduction_partial_results[t].value = accum;
-
-        for(std::size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
-        {
-            bar.arrive_and_wait();
-            if(((t % s_next) == 0) && (t + s < T))
-                reduction_partial_results[t].value = f(reduction_partial_results[t].value,
-                                                       reduction_partial_results[t + s].value);
-        }
-    };
-
-    vector<thread> threads;
-    for(unsigned t = 1; t < T; t++)
-        threads.emplace_back(thread_proc, t);
-    thread_proc(0);
-    for(auto& thread : threads)
-        thread.join();
-
-    return reduction_partial_results[0].value;
-}
-
-template <class ElementType, class UnaryFn, class BinaryFn>
-// requires {
-//     is_invocable_r_v<UnaryFn, ElementType, ElementType> &&
-//     is_invocable_r_v<BinaryFn, ElementType, ElementType, ElementType>
-// }
-ElementType reduce_range(ElementType a, ElementType b, size_t n, UnaryFn get, BinaryFn reduce_2, ElementType zero)
-{
-    unsigned T = get_num_threads();
-    struct reduction_partial_result_t
-    {
-        alignas(hardware_destructive_interference_size) ElementType value;
-    };
-    static auto reduction_partial_results =
-            vector<reduction_partial_result_t>(thread::hardware_concurrency(), reduction_partial_result_t{zero});
-
-    barrier bar{T};
-    constexpr size_t k = 2;
-    auto thread_proc = [=, &bar](unsigned t)
-    {
-        auto K = ceil_div(n, k);
-        double dx = (b - a) / n;
-        size_t Mt = K / T;
-        size_t it1 = K % T;
-
-        if(t < it1)
-        {
-            it1 = ++Mt * t;
-        }
-        else
-        {
-            it1 = Mt * t + it1;
-        }
-        it1 *= k;
-        size_t mt = Mt * k;
-        size_t it2 = it1 + mt;
-
-        ElementType accum = zero;
-        for(size_t i = it1; i < it2; i++)
-            accum = reduce_2(accum, get(a + i*dx));
-
-        reduction_partial_results[t].value = accum;
-
-        for(size_t s = 1, s_next = 2; s < T; s = s_next, s_next += s_next)
-        {
-            bar.arrive_and_wait();
-            if(((t % s_next) == 0) && (t + s < T))
-                reduction_partial_results[t].value = reduce_2(reduction_partial_results[t].value,
-                                                              reduction_partial_results[t + s].value);
-        }
-    };
-
-    vector<thread> threads;
-    for (unsigned t = 1; t < T; t++)
-        threads.emplace_back(thread_proc, t);
-    thread_proc(0);
-    for (auto &thread: threads)
-        thread.join();
-    return reduction_partial_results[0].value;
-}
-
-double integrate_reduction(double a, double b, f_t f) {
-    return reduce_range(a, b, STEPS, f, [](auto x, auto y) { return x + y; }, 0.0) * ((b - a) / STEPS);
-}
 
 //---Randomize----------------------------------------------------------------------------------------------------------
 
@@ -658,10 +538,6 @@ int main() {
 //    show_experiment_result_Fib(Fibonacci_sch_omp);
 //    printf("Fib\n");
 //    show_experiment_result_Fib(Fibonacci);
-
-
-    printf("Rand single\n");
-    show_experiment_result_Rand(randomize_arr_single);
     printf("Rand omp fs\n");
     show_experiment_result_Rand(randomize_arr_fs);
 
