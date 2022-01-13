@@ -431,7 +431,7 @@ uint64_t getB(unsigned size, uint64_t a){
     uint64_t res = 1;
     acc[0] = 1;
     for (unsigned i=1; i<=size; i++){
-        for (unsigned j=0; j<=i; j++){
+        for (unsigned j=0; j<i; j++){
             acc[i] = acc[j] * a;
         }
         res += acc[i];
@@ -466,9 +466,9 @@ double randomize_arr(unsigned seed, unsigned* V, size_t n, unsigned min, unsigne
 
         for (unsigned i=t; i<n; i += T){
             if (i == t){
-                cur = getA(i+1, a)*prev + getB(i, a) + b;
+                cur = getA(i+1, a)*prev + getB(i, a) * b;
             } else {
-                cur = LUTA*prev + LUTB + b;
+                cur = LUTA*prev + LUTB;
             }
 //            cur = LUTA[i+1]*prev + LUTB[i];
             V[i] = (cur % (max - min + 1)) + min;
